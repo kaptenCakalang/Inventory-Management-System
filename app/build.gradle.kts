@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.template"
+    namespace = "com.example.inventorymanagementsystem"
     compileSdk = 36
 
     defaultConfig {
@@ -49,6 +49,10 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    implementation(libs.androidx.material.icons.extended)
+    implementation("androidx.navigation:navigation-compose:2.9.5")
+    implementation("com.google.accompanist:accompanist-flowlayout:0.30.1")
+    implementation(libs.androidx.foundation)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
