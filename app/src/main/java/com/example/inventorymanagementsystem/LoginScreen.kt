@@ -1,5 +1,6 @@
-package com.example.inventorymanagementsystem.screens
+package com.example.inventorymanagementsystem
 
+import android.util.Patterns
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -18,42 +19,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.draw.clip
-
-// Data class to hold user information
-data class User(
-    val email: String,
-    val password: String,
-    val fullName: String = ""
-)
-
-// ViewModel to manage authentication state (you can move this to a separate file)
-class AuthViewModel {
-    // In a real app, this would be backed by a database or API
-    private val users = mutableListOf<User>()
-
-    fun login(email: String, password: String): Boolean {
-        return users.any { it.email == email && it.password == password }
-    }
-
-    fun signUp(fullName: String, email: String, password: String): Boolean {
-        // Check if user already exists
-        if (users.any { it.email == email }) {
-            return false
-        }
-
-        // Add new user
-        users.add(User(email = email, password = password, fullName = fullName))
-        return true
-    }
-}
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.UserProfileChangeRequest
+import kotlinx.coroutines.tasks.await
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
-    onLoginSuccess: () -> Unit = {},
-    onNavigateToSignUp: () -> Unit = {},
-    onNavigateToSurvey: () -> Unit = {}
+    onNavigateToSurvey: () -> Unit = {},
+    onNavigateToHome: () -> Unit = {}
 ) {
     // State variables
     var email by remember { mutableStateOf("") }
@@ -71,15 +45,15 @@ fun LoginScreen(
     var fullNameError by remember { mutableStateOf("") }
     var authError by remember { mutableStateOf("") }
 
-    // Create ViewModel (in a real app, this would be injected)
-    val authViewModel = remember { AuthViewModel() }
+    var isLoading by remember { mutableStateOf(false) }
+    val auth = FirebaseAuth.getInstance()
 
     // Validation functions
     fun validateEmail(): Boolean {
         return if (email.isBlank()) {
             emailError = "Email is required"
             false
-        } else if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+        } else if (!Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
             emailError = "Please enter a valid email"
             false
         } else {
@@ -132,32 +106,62 @@ fun LoginScreen(
     }
 
     fun handleAuthentication() {
-        authError = ""
-
         if (!validateForm()) {
             return
         }
 
+        isLoading = true
+        authError = ""
+
         if (isLoginMode) {
-            // Login logic
-            if (authViewModel.login(email, password)) {
-                onNavigateToSurvey()
-            } else {
-                authError = "Invalid email or password"
-            }
+            // Login
+            auth.signInWithEmailAndPassword(email, password)
+                .addOnCompleteListener { task ->
+                    isLoading = false
+                    if (task.isSuccessful) {
+                        // Check if this is a new user (first time login)
+                        val user = auth.currentUser
+                        if (user != null) {
+                            // For existing users, go directly to home
+                            // For new users, they would go to survey
+                            // We'll assume all users go to home for now
+                            onNavigateToHome()
+                        }
+                    } else {
+                        authError = task.exception?.message ?: "Login failed"
+                    }
+                }
         } else {
-            // Sign up logic
-            if (authViewModel.signUp(fullName, email, password)) {
-                // Auto-login after successful sign up
-                isLoginMode = true
-                authError = "Account created successfully! Please log in."
-                // Clear form
-                fullName = ""
-                password = ""
-                confirmPassword = ""
-            } else {
-                authError = "An account with this email already exists"
-            }
+            // Sign up
+            auth.createUserWithEmailAndPassword(email, password)
+                .addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        val user = auth.currentUser
+                        if (user != null && fullName.isNotBlank()) {
+                            // Update user profile with display name
+                            val profileUpdates = UserProfileChangeRequest.Builder()
+                                .setDisplayName(fullName)
+                                .build()
+
+                            user.updateProfile(profileUpdates)
+                                .addOnCompleteListener { profileTask ->
+                                    isLoading = false
+                                    if (profileTask.isSuccessful) {
+                                        // New users go to survey
+                                        onNavigateToSurvey()
+                                    } else {
+                                        authError = profileTask.exception?.message ?: "Profile update failed"
+                                    }
+                                }
+                        } else {
+                            isLoading = false
+                            onNavigateToSurvey()
+                        }
+                    } else {
+                        isLoading = false
+                        authError = task.exception?.message ?: "Registration failed"
+                    }
+                }
         }
     }
 
@@ -275,12 +279,22 @@ fun LoginScreen(
             if (authError.isNotEmpty()) {
                 Text(
                     text = authError,
-                    color = if (authError.contains("successfully")) Color(0xFF4CAF50) else Color.Red,
+                    color = Color.Red,
                     fontSize = 14.sp,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 16.dp),
                     textAlign = TextAlign.Start
+                )
+            }
+
+            // Loading state
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .padding(bottom = 16.dp),
+                    color = Color(0xFF4CAF50)
                 )
             }
 
@@ -483,6 +497,7 @@ fun LoginScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
+                enabled = !isLoading,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF4CAF50)
                 )

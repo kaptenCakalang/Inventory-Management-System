@@ -1,4 +1,4 @@
-package com.example.inventorymanagementsystem.screens
+package com.example.inventorymanagementsystem
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
